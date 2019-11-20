@@ -38,12 +38,6 @@ def build_deps():
     # with open(version_path, 'w') as f:
     #     f.write('__version__ = \'{}\'\n'.format(version))
 
-    # build nv-usd
-    sp = site.getsitepackages()[0]
-    os.system('./buildusd.sh')
-    lib = Path.cwd() / 'build/target-deps/nv_usd/release/lib/'
-    os.system(f'ln -s {str(lib)}/python/ {sp}')
-
 
 def read(*names, **kwargs):
     with io.open(
@@ -75,26 +69,6 @@ requirements = [
 if __name__ == '__main__':
 
     build_deps()
-    setup(
-        # Metadata
-        name=package_name,
-        version=version,
-        author='nvidia',
-        description='Kaolin: A PyTorch library for accelerating 3D deep learning research',
-        url='',
-        long_description='',
-        license='',
-        python_requires='>3.6',
-
-        # Package info
-        packages=find_packages(exclude=('docs', 'test', 'examples')),
-
-        zip_safe=True,
-        install_requires=requirements
-        # ext_modules=ext_modules,
-        # cmdclass = {'build_ext': BuildExtension}
-
-    )
 
     import torch
     from torch.utils.cpp_extension import BuildExtension, CUDAExtension
@@ -192,7 +166,7 @@ if __name__ == '__main__':
         packages=find_packages(exclude=('docs', 'test', 'examples')),
 
         zip_safe=True,
+        install_requires=requirements,
         ext_modules=cythonize(ext_modules),
         cmdclass={'build_ext': BuildExtension}
-
     )
