@@ -28,7 +28,7 @@ class PointNetFeatureExtractor(nn.Module):
     .. note::
 
         If you use this code, please cite the original paper in addition to Kaolin.
-        
+
         .. code-block::
 
             @article{qi2016pointnet,
@@ -79,9 +79,10 @@ class PointNetFeatureExtractor(nn.Module):
                  in_channels: int = 3,
                  feat_size: int = 1024,
                  layer_dims: Iterable[int] = [64, 128],
-                 global_feat: bool = True,
+                 output_feat: str = 'global',
                  activation=F.relu,
                  batchnorm: bool = True,
+                 final_batchnorm: bool = True,
                  transposed_input: bool = False):
         super(PointNetFeatureExtractor, self).__init__()
 
@@ -98,10 +99,14 @@ class PointNetFeatureExtractor(nn.Module):
                 raise TypeError('Elements of layer_dims must be of type int. '
                                 'Found type {0} at index {1}.'.format(
                                     type(layer_dim), idx))
-        if not isinstance(global_feat, bool):
-            raise TypeError('Argument global_feat expected to be of type '
-                            'bool. Got {0} instead.'.format(
-                                type(global_feat)))
+        if not isinstance(output_feat, str):
+            raise TypeError('Argument output_feat expected to be of type '
+                            'str. Got {0} instead.'.format(
+                                type(output_feat)))
+        if output_feat not in ['global', 'pointwise', 'combined']:
+            raise ValueError("output_feat must be one of 'global', "
+                             "'pointwise', or 'combined', got {0} instead"
+                             .format(output_feat))
 
         # Store feat_size as a class attribute
         self.feat_size = feat_size
@@ -109,8 +114,8 @@ class PointNetFeatureExtractor(nn.Module):
         # Store activation as a class attribute
         self.activation = activation
 
-        # Store global_feat as a class attribute
-        self.global_feat = global_feat
+        # Store output_feat as a class attribute
+        self.output_feat = output_feat
 
         # Add in_channels to the head of layer_dims (the first layer
         # has number of channels equal to `in_channels`). Also, add
@@ -121,16 +126,20 @@ class PointNetFeatureExtractor(nn.Module):
         layer_dims.append(feat_size)
 
         self.conv_layers = nn.ModuleList()
-        if batchnorm:
-            self.bn_layers = nn.ModuleList()
         for idx in range(len(layer_dims) - 1):
             self.conv_layers.append(nn.Conv1d(layer_dims[idx],
                                               layer_dims[idx + 1], 1))
-            if batchnorm:
+        if batchnorm:
+            self.bn_layers = nn.ModuleList()
+            count = len(layer_dims) - 1
+            if not final_batchnorm:
+                count -= 1
+            for idx in range(count):
                 self.bn_layers.append(nn.BatchNorm1d(layer_dims[idx + 1]))
 
         # Store whether or not to use batchnorm as a class attribute
         self.batchnorm = batchnorm
+        self.final_batchnorm = final_batchnorm
 
         self.transposed_input = transposed_input
 
@@ -153,10 +162,6 @@ class PointNetFeatureExtractor(nn.Module):
         # Number of points
         num_points = x.shape[2]
 
-        # By default, initialize local features (per-point features)
-        # to None.
-        local_features = None
-
         # Apply a sequence of conv-batchnorm-nonlinearity operations
 
         # For the first layer, store the features, as these will be
@@ -165,8 +170,6 @@ class PointNetFeatureExtractor(nn.Module):
             x = self.activation(self.bn_layers[0](self.conv_layers[0](x)))
         else:
             x = self.activation(self.conv_layers[0](x))
-        if self.global_feat is False:
-            local_features = x
 
         # Pass through the remaining layers (until the penultimate layer).
         for idx in range(1, len(self.conv_layers) - 1):
@@ -177,23 +180,27 @@ class PointNetFeatureExtractor(nn.Module):
                 x = self.activation(self.conv_layers[idx](x))
 
         # For the last layer, do not apply nonlinearity.
-        if self.batchnorm:
+        if self.batchnorm and self.final_batchnorm:
             x = self.bn_layers[-1](self.conv_layers[-1](x))
         else:
             x = self.conv_layers[-1](x)
 
+        pointwise_features = x
+        if self.output_feat == 'pointwise':
+            return pointwise_features
+
         # Max pooling.
-        x = torch.max(x, 2, keepdim=True)[0]
+        x = torch.max(pointwise_features, 2, keepdim=True)[0]
         x = x.view(-1, self.feat_size)
 
         # If extracting global features, return at this point.
-        if self.global_feat:
+        if self.output_feat == 'global':
             return x
-
-        # If extracting local features, compute local features by
-        # concatenating global features, and per-point features
-        x = x.view(-1, self.feat_size, 1).repeat(1, 1, num_points)
-        return torch.cat((x, local_features), dim=1)
+        else:
+            # If extracting combined features, compute local features by
+            # concatenating global features, and per-point features
+            x = x.view(-1, self.feat_size, 1).repeat(1, 1, num_points)
+            return torch.cat((x, pointwise_features), dim=1)
 
 
 class PointNetClassifier(nn.Module):
@@ -203,7 +210,7 @@ class PointNetClassifier(nn.Module):
     .. note::
 
         If you use this code, please cite the original paper in addition to Kaolin.
-        
+
         .. code-block::
 
             @article{qi2016pointnet,
@@ -368,7 +375,7 @@ class PointNetSegmenter(nn.Module):
     .. note::
 
         If you use this code, please cite the original paper in addition to Kaolin.
-        
+
         .. code-block::
 
             @article{qi2016pointnet,
