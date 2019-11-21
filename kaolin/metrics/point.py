@@ -97,6 +97,35 @@ def chamfer_distance(S1: torch.Tensor, S2: torch.Tensor,
     return distance
 
 
+def batch_chamfer_distance(S1: torch.Tensor, S2: torch.Tensor,
+                           w1: float = 1., w2: float = 1.):
+    r"""Computes the chamfer distance between two point clouds
+
+    Args:
+            S1 (torch.Tensor): point cloud
+            S2 (torch.Tensor): point cloud
+            w1: (float): weighting of forward direction
+            w2: (float): weighting of backward direction
+
+    Returns:
+            torch.Tensor: chamfer distance between two point clouds S1 and S2
+
+    Example:
+            >>> A = torch.rand(2,300,3)
+            >>> B = torch.rand(2,200,3)
+            >>> batch_chamfer_distance(A,B)
+            tensor(0.1868)
+
+    """
+
+    assert (S1.dim() == S2.dim()), 'S1 and S2 must have the same dimesionality'
+    assert (S1.dim() == 3), 'the dimensions of the input must be 2 '
+    dist_to_S2 = batch_directed_distance(S1, S2)
+    dist_to_S1 = batch_directed_distance(S2, S1)
+    distance = w1 * dist_to_S2 + w2 * dist_to_S1
+    return distance
+
+
 def directed_distance(S1: torch.Tensor, S2: torch.Tensor, mean: bool = True):
     r"""Computes the average distance from point cloud S1 to point cloud S2
 
@@ -134,6 +163,33 @@ def directed_distance(S1: torch.Tensor, S2: torch.Tensor, mean: bool = True):
         dist_to_S2 = dist_to_S2.mean()
 
     return dist_to_S2
+
+
+def batch_directed_distance(S1: torch.Tensor, S2: torch.Tensor):
+    r"""Computes the average distance from point cloud S1 to point cloud S2
+
+    Args:
+            S1 (torch.Tensor): point cloud
+            S2 (torch.Tensor): point cloud
+            mean (bool): if the distances should be reduced to the average
+
+    Returns:
+            torch.Tensor: ditance from point cloud S1 to point cloud S2
+
+    Example:
+            >>> A = torch.rand(2,300,3)
+            >>> B = torch.rand(2,200,3)
+            >>> batch_directed_distance(A,B)
+            tensor(0.1868)
+
+    """
+    assert (S1.is_cuda and S2.is_cuda), 'Loss fn requires cuda inputs'
+    sided_minimum_dist = SidedDistance()
+    cidx = sided_minimum_dist(S1, S2)
+    cidx_repeat = cidx.unsqueeze(2).repeat([1, 1, S2.size(2)])
+    closest_S2 = torch.gather(S2, dim=1, index=cidx_repeat)
+    dist_to_S2 = (((S1 - closest_S2)**2).sum(dim=-1))
+    return dist_to_S2.mean()
 
 
 def iou(points1: torch.Tensor, points2: torch.Tensor, thresh=.5):
