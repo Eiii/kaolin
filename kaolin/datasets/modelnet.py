@@ -15,9 +15,8 @@
 from typing import Callable, Iterable, Optional, Union
 
 import torch
-import os
 import sys
-from glob import glob
+from pathlib import Path
 import scipy.io as sio
 
 import kaolin as kal
@@ -27,11 +26,11 @@ _MODELNET10_CLASSES = ['bathtub', 'bed', 'chair', 'desk', 'dresser', 'monitor',
                        'night_stand', 'sofa', 'table', 'toilet']
 
 
-class ModelNet10(torch.utils.data.Dataset):
-    r"""Dataset class for the ModelNet10 dataset.
+class ModelNet(torch.utils.data.Dataset):
+    r"""Dataset class for the ModelNet10/40 datasets.
 
     Args:
-        basedir (str): Path to the base directory of the ModelNet10 dataset.
+        basedir (str): Path to the base directory of the ModelNet dataset.
         rep (str, optional): Type of representation to convert the dataset into
             (default: 'mesh').
         split (str, optional): Split to load ('train' vs 'test',
@@ -49,45 +48,43 @@ class ModelNet10(torch.utils.data.Dataset):
 
     """
 
-    def __init__(self, basedir: str, rep: Optional[str] = 'mesh',
+    def __init__(self, basedir: Union[str, Path], rep: Optional[str] = 'mesh',
                  split: Optional[str] = 'train',
-                 categories: Optional[Iterable] = ['bed'],
+                 categories: Optional[Iterable] = None,
                  device: Optional[Union[torch.device, str]] = 'cpu',
                  transform: Optional[Callable] = None,
                  **kwargs):
 
-        super(ModelNet10, self).__init__()
+        super(ModelNet, self).__init__()
 
-        if rep.lower() not in ['mesh', 'pointcloud']:
+        if rep not in ['mesh', 'pointcloud']:
             raise ValueError('Argument \'rep\' must be one of \'mesh\' '
                 ' or \'pointcloud\'. Got {0} instead.'.format(rep))
-        if split.lower() not in ['train', 'test']:
+        if split not in ['train', 'test']:
             raise ValueError('Argument \'split\' must be one of \'train\' '
                 ' or \'test\'. Got {0} instead.'.format(split))
 
-        self.categories = categories
+        if not isinstance(basedir, Path):
+            basedir = Path(basedir)
+
+        # Find categories provided by the dataset
+        avail_categories = [d.name for d in basedir.iterdir() if d.is_dir()]
+        self.categories = categories or avail_categories
         self.paths = []
         self.labels = []
         for idx, cat in enumerate(self.categories):
-
-            if cat not in _MODELNET10_CLASSES:
-                raise ValueError('Invalid ModelNet10 class {0}. Valid classes '
-                    ' are {1}'.format(cat, _MODELNET10_CLASSES))
-            
-            catdir = os.path.join(basedir, cat, split)
-            for path in glob(os.path.join(catdir, '*.off')):
+            if cat not in avail_categories:
+                raise ValueError('Invalid ModelNet class {0}. Valid classes '
+                    ' are {1}'.format(cat, avail_categories))
+            catdir = basedir / cat / split
+            for path in catdir.glob('*.off'):
                 self.paths.append(path)
                 self.labels.append(idx)
 
         self.rep = rep
         self.device = device
         self.transform = transform
-
-        # Set defaults for kwargs
-        if 'num_points' in kwargs:
-            self.num_points = kwargs['num_points']
-        else:
-            self.num_points = 1024
+        self.num_points = kwargs.get('num_points', 1024)
 
     def __len__(self):
         r"""Returns the length of the dataset. """
@@ -95,7 +92,7 @@ class ModelNet10(torch.utils.data.Dataset):
 
     def __getitem__(self, idx):
         r"""Returns the item at index `idx`. """
-        
+
         mesh = kal.rep.TriangleMesh.from_off(self.paths[idx])
         mesh.to(self.device)
         label = torch.LongTensor([self.labels[idx]]).to(self.device)
@@ -125,7 +122,7 @@ class ModelNetVoxels(object):
 
     Returns:
         .. code-block::
-        
+
         dict: {
             'attributes': {'name': str, 'class': str},
             'data': {'voxels': torch.Tensor}
@@ -174,7 +171,7 @@ class ModelNetVoxels(object):
         if sys.platform.startswith('win'):
             object_path = object_path.replace('\\', '/')
 
-        
+
         object_class = object_path.split('/')[-4]
         object_name = object_path.split('/')[-1]
         object_data = sio.loadmat(object_path)['instance']
