@@ -275,6 +275,23 @@ class NormalizePointCloud(object):
     def __repr__(self):
         return self.__class__.__name__ + '(normalize)'
 
+class UnitSpherePointCloud(object):
+    r"""Normalize a pointcloud such that it is contained within a unit sphere.
+    """
+    def __call__(self, cloud: Union[torch.Tensor, PointCloud]):
+        r"""
+        Args:
+            src (torch.Tensor or PointCloud): Pointcloud to be normalized
+                (shape: :math:`B \times \cdots \times N \times D`, where
+                :math:`B` is the batchsize (optional), :math:`N` is the
+                number of points in the cloud, and :math:`D` is the
+                dimensionality of the cloud.
+        """
+        return pcfunc.unit_sphere(cloud)
+
+    def __repr__(self):
+        return self.__class__.__name__ + '(unit sphere)'
+
 
 class DownsampleVoxelGrid(object):
     r"""Downsamples a voxelgrid, given a (down)scaling factor for each
