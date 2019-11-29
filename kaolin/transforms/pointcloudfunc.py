@@ -206,3 +206,14 @@ def normalize(cloud: Union[torch.Tensor, PointCloud],
         / (cloud.std(-2).unsqueeze(-2) + EPS)
 
     return cloud
+
+def unit_sphere(cloud: Union[torch.Tensor, PointCloud]):
+    if isinstance(cloud, np.ndarray):
+        cloud = torch.from_numpy(cloud)
+
+    helpers._assert_tensor(cloud)
+    helpers._assert_dim_ge(cloud, 2)
+    cc = cloud - cloud.mean(-2, keepdim=True)
+    maxs = (cc**2).sum(-1, keepdim=True).max(-2, keepdim=True)[0]**0.5
+    sphere_cloud = cc / maxs
+    return sphere_cloud
