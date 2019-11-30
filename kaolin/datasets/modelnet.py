@@ -18,6 +18,7 @@ import torch
 import sys
 from pathlib import Path
 import scipy.io as sio
+import numpy as np
 
 import kaolin as kal
 
@@ -115,12 +116,10 @@ class ModelNetPointCloud(torch.utils.data.Dataset):
                  categories: Optional[Iterable] = None,
                  device: Optional[Union[torch.device, str]] = 'cpu',
                  transform: Optional[Callable] = None,
-                 **kwargs):
-        super(ModelNet, self).__init__()
+                 num_points: int = 2**10,
+                 sample_points: int = 2**12):
+        super(ModelNetPointCloud, self).__init__()
 
-        if rep not in ['mesh', 'pointcloud']:
-            raise ValueError('Argument \'rep\' must be one of \'mesh\' '
-                ' or \'pointcloud\'. Got {0} instead.'.format(rep))
         if split not in ['train', 'test']:
             raise ValueError('Argument \'split\' must be one of \'train\' '
                 ' or \'test\'. Got {0} instead.'.format(split))
@@ -142,11 +141,10 @@ class ModelNetPointCloud(torch.utils.data.Dataset):
                 self.paths.append(path)
                 self.labels.append(idx)
 
-        self.rep = rep
         self.device = device
         self.transform = transform
-        self.num_points = kwargs.get('num_points', 1024)
-        self.sample_points = kwargs.get('sample_points', self.num_points)
+        self.num_points = num_points
+        self.sample_points = sample_points
         self.sample_cache = dict()
 
     def __len__(self):
@@ -158,17 +156,18 @@ class ModelNetPointCloud(torch.utils.data.Dataset):
         if idx not in self.sample_cache:
             mesh = kal.rep.TriangleMesh.from_off(self.paths[idx])
             mesh.to(self.device)
-            pts, _ = mesh.sample(self.sample_points)
-            self.sample_cache[idx] = pts
+            full_pts, _ = mesh.sample(self.sample_points)
+            self.sample_cache[idx] = full_pts
+        else:
+            full_pts = self.sample_cache[idx]
 
-        full_pts = self.sample_cache[idx]
         # Downsample points
-        idxs = np.random.choice(pts.size(0), size=self.num_points,
+        idxs = np.random.choice(full_pts.size(0), size=self.num_points,
                                 replace=False)
         pts = full_pts[idxs, :]
         if self.transform is not None:
             pts = self.transform(pts)
-        return pts, label
+        return pts
 
 
 class ModelNetVoxels(object):
