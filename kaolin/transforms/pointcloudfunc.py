@@ -16,6 +16,7 @@ from typing import Optional, Union
 
 import numpy as np
 import torch
+import math
 
 from kaolin.rep import PointCloud
 from kaolin import helpers
@@ -74,14 +75,30 @@ def scale(cloud: Union[torch.Tensor, PointCloud],
     return scf * cloud
 
 
-def rotate(cloud: Union[torch.Tensor, PointCloud], rotmat: torch.Tensor,
-           inplace: Optional[bool] = True):
+def random_rotate(cloud: Union[torch.Tensor, PointCloud], rot_type: str):
+    n1, n2, n3 = torch.rand(3)
+    angle = n1*2*math.pi
+    s = torch.sin(angle)
+    c = torch.cos(angle)
+    rot_mat = torch.tensor([[c, -s, 0], [s, c, 0], [0, 0, 1]],
+                           device=cloud.device)
+    if type == 'full':
+        # Fast Random Rotation Matrices - James Arvo
+        a2 = 2*math.pi*n2
+        v = torch.tensor([[torch.cos(a2)*torch.sqrt(n3),
+                            torch.sin(a2)*torch.sqrt(n3),
+                            torch.sqrt(1-n3)]])
+        h = torch.eye(3)-2*v*v.transpose(0, 1)
+        rot_mat = torch.mm(-h, rot_mat)
+    return rotate(cloud, rot_mat)
+
+
+def rotate(cloud: Union[torch.Tensor, PointCloud], rotmat: torch.Tensor):
     """Rotates the the input pointcloud by a rotation matrix.
 
     Args:
         cloud (Tensor or np.array): pointcloud (ndims = 2 or 3)
         rotmat (Tensor or np.array): rotation matrix (3 x 3, 1 per cloud).
-        inplace (bool, optional): Bool to make the transform in-place.
 
     Returns:
         cloud_rot (Tensor): rotated pointcloud of the same shape as input
@@ -112,9 +129,6 @@ def rotate(cloud: Union[torch.Tensor, PointCloud], rotmat: torch.Tensor,
     # Rotation matrix must have last two dimensions of shape 3.
     helpers._assert_shape_eq(rotmat, (3, 3), dim=-1)
     helpers._assert_shape_eq(rotmat, (3, 3), dim=-2)
-
-    if not inplace:
-        cloud = cloud.clone()
 
     if rotmat.dim() == 2 and cloud.dim() == 2:
         cloud = torch.mm(rotmat, cloud.transpose(0, 1)).transpose(0, 1)
