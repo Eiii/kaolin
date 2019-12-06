@@ -83,6 +83,7 @@ class PointNetFeatureExtractor(nn.Module):
                  activation=F.relu,
                  batchnorm: bool = True,
                  final_batchnorm: bool = True,
+                 init_batchnorm: bool = True,
                  transposed_input: bool = False):
         super(PointNetFeatureExtractor, self).__init__()
 
@@ -134,12 +135,16 @@ class PointNetFeatureExtractor(nn.Module):
             count = len(layer_dims) - 1
             if not final_batchnorm:
                 count -= 1
+            if not init_batchnorm:
+                count -= 1
+                self.bn_layers.append(None)
             for idx in range(count):
                 self.bn_layers.append(nn.BatchNorm1d(layer_dims[idx + 1]))
 
         # Store whether or not to use batchnorm as a class attribute
         self.batchnorm = batchnorm
         self.final_batchnorm = final_batchnorm
+        self.init_batchnorm = init_batchnorm
 
         self.transposed_input = transposed_input
 
@@ -166,7 +171,7 @@ class PointNetFeatureExtractor(nn.Module):
 
         # For the first layer, store the features, as these will be
         # used to compute local features (if specified).
-        if self.batchnorm:
+        if self.batchnorm and self.init_batchnorm:
             x = self.activation(self.bn_layers[0](self.conv_layers[0](x)))
         else:
             x = self.activation(self.conv_layers[0](x))
