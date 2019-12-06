@@ -135,9 +135,6 @@ class PointNetFeatureExtractor(nn.Module):
             count = len(layer_dims) - 1
             if not final_batchnorm:
                 count -= 1
-            if not init_batchnorm:
-                count -= 1
-                self.bn_layers.append(None)
             for idx in range(count):
                 self.bn_layers.append(nn.BatchNorm1d(layer_dims[idx + 1]))
 
