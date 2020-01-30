@@ -169,7 +169,8 @@ class ModelNetPointCloud(torch.utils.data.Dataset):
             if self.transform is not None:
                 pts = self.transform(pts)
         except:
-            import pdb; pdb.set_trace()
+            print('ERROR')
+            print(idx, self.paths[idx])
         return pts
 
 
