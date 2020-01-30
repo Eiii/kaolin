@@ -153,20 +153,23 @@ class ModelNetPointCloud(torch.utils.data.Dataset):
 
     def __getitem__(self, idx):
         r"""Returns the item at index `idx`. """
-        if idx not in self.sample_cache:
-            mesh = kal.rep.TriangleMesh.from_off(self.paths[idx])
-            mesh.to(self.device)
-            full_pts, _ = mesh.sample(self.sample_points)
-            self.sample_cache[idx] = full_pts
-        else:
-            full_pts = self.sample_cache[idx]
+        try:
+            if idx not in self.sample_cache:
+                mesh = kal.rep.TriangleMesh.from_off(self.paths[idx])
+                full_pts, _ = mesh.sample(self.sample_points)
+                self.sample_cache[idx] = full_pts
+            else:
+                full_pts = self.sample_cache[idx]
 
-        # Downsample points
-        idxs = np.random.choice(full_pts.size(0), size=self.num_points,
-                                replace=False)
-        pts = full_pts[idxs, :]
-        if self.transform is not None:
-            pts = self.transform(pts)
+            # Downsample points
+            idxs = np.random.choice(full_pts.size(0), size=self.num_points,
+                                    replace=False)
+            pts = full_pts[idxs, :]
+            pts = pts.to(self.device)
+            if self.transform is not None:
+                pts = self.transform(pts)
+        except:
+            import pdb; pdb.set_trace()
         return pts
 
 
