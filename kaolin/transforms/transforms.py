@@ -226,6 +226,24 @@ class RotatePointCloud(object):
         return self.__class__.__name__ + '(rotmat={0})'.format(self.rotmat)
 
 
+class RandomRotatePointCloud(object):
+    def __init__(self, type: Optional[str] = 'upright'):
+        self.type = type
+
+    def __call__(self, cloud: Union[torch.Tensor, PointCloud]):
+        """
+        Args:
+            cloud (torch.Tensor or PointCloud): Input pointcloud to be rotated.
+
+        Returns:
+            (torch.Tensor or PointCloud): Rotated pointcloud.
+        """
+        return pcfunc.random_rotate(cloud, rot_type=self.type)
+
+    def __repr__(self):
+        return self.__class__.__name__ + '(type={0})'.format(self.type)
+
+
 class RealignPointCloud(object):
     r"""Re-align a `src` pointcloud such that it fits in an axis-aligned
     bounding box whose size matches the `tgt` pointcloud.
