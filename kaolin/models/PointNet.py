@@ -84,7 +84,8 @@ class PointNetFeatureExtractor(nn.Module):
                  norm: bool = True,
                  final_norm: bool = True,
                  transposed_input: bool = False,
-                 norm_type: str = 'batch'):
+                 norm_type: str = 'batch',
+                 residual: bool = False):
         super(PointNetFeatureExtractor, self).__init__()
 
         if not isinstance(in_channels, int):
@@ -118,6 +119,8 @@ class PointNetFeatureExtractor(nn.Module):
         # Store output_feat as a class attribute
         self.output_feat = output_feat
 
+        self.residual = residual
+
         # Add in_channels to the head of layer_dims (the first layer
         # has number of channels equal to `in_channels`). Also, add
         # feat_size to the tail of layer_dims.
@@ -127,9 +130,13 @@ class PointNetFeatureExtractor(nn.Module):
         layer_dims.append(feat_size)
 
         self.conv_layers = nn.ModuleList()
+        prev_size = 0
         for idx in range(len(layer_dims) - 1):
-            self.conv_layers.append(nn.Conv1d(layer_dims[idx],
-                                              layer_dims[idx + 1], 1))
+            in_size = layer_dims[idx]
+            if residual:
+                in_size += prev_size
+                prev_size += layer_dims[idx]
+            self.conv_layers.append(nn.Conv1d(in_size, layer_dims[idx + 1], 1))
         if norm:
             self.n_layers = nn.ModuleList()
             count = len(layer_dims) - 1
@@ -171,7 +178,12 @@ class PointNetFeatureExtractor(nn.Module):
         # Apply a sequence of conv-batchnorm-nonlinearity operations
 
         # Pass through the remaining layers (until the penultimate layer).
+        prev_in = None
         for idx in range(len(self.conv_layers) - 1):
+            if self.residual:
+                if prev_in is not None:
+                    x = torch.cat((prev_in, x), dim=1)
+                prev_in = x
             x = self.conv_layers[idx](x)
             if self.norm:
                 if self.norm_type == 'layer':
@@ -183,6 +195,8 @@ class PointNetFeatureExtractor(nn.Module):
             x = self.activation(x)
 
         # For the last layer, do not apply nonlinearity.
+        if self.residual and prev_in is not None:
+            x = torch.cat((prev_in, x), dim=1)
         x = self.conv_layers[-1](x)
         if self.norm and self.final_norm:
             if self.norm_type == 'layer':
