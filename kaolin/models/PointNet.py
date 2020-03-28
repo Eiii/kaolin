@@ -81,9 +81,10 @@ class PointNetFeatureExtractor(nn.Module):
                  layer_dims: Iterable[int] = [64, 128],
                  output_feat: str = 'global',
                  activation=F.relu,
-                 batchnorm: bool = True,
-                 final_batchnorm: bool = True,
-                 transposed_input: bool = False):
+                 norm: bool = True,
+                 final_norm: bool = True,
+                 transposed_input: bool = False,
+                 norm_type: str = 'batch'):
         super(PointNetFeatureExtractor, self).__init__()
 
         if not isinstance(in_channels, int):
@@ -129,17 +130,22 @@ class PointNetFeatureExtractor(nn.Module):
         for idx in range(len(layer_dims) - 1):
             self.conv_layers.append(nn.Conv1d(layer_dims[idx],
                                               layer_dims[idx + 1], 1))
-        if batchnorm:
-            self.bn_layers = nn.ModuleList()
+        if norm:
+            self.n_layers = nn.ModuleList()
             count = len(layer_dims) - 1
-            if not final_batchnorm:
+            if not final_norm:
                 count -= 1
             for idx in range(count):
-                self.bn_layers.append(nn.BatchNorm1d(layer_dims[idx + 1]))
+                if norm_type == 'batch':
+                    norm = nn.BatchNorm1d(layer_dims[idx+1])
+                elif norm_type == 'layer':
+                    norm = nn.LayerNorm(layer_dims[idx+1])
+                self.n_layers.append(norm)
 
         # Store whether or not to use batchnorm as a class attribute
-        self.batchnorm = batchnorm
-        self.final_batchnorm = final_batchnorm
+        self.norm = norm
+        self.final_norm = final_norm
+        self.norm_type = norm_type
 
         self.transposed_input = transposed_input
 
@@ -164,26 +170,27 @@ class PointNetFeatureExtractor(nn.Module):
 
         # Apply a sequence of conv-batchnorm-nonlinearity operations
 
-        # For the first layer, store the features, as these will be
-        # used to compute local features (if specified).
-        if self.batchnorm:
-            x = self.activation(self.bn_layers[0](self.conv_layers[0](x)))
-        else:
-            x = self.activation(self.conv_layers[0](x))
-
         # Pass through the remaining layers (until the penultimate layer).
-        for idx in range(1, len(self.conv_layers) - 1):
-            if self.batchnorm:
-                x = self.activation(self.bn_layers[idx](
-                    self.conv_layers[idx](x)))
-            else:
-                x = self.activation(self.conv_layers[idx](x))
+        for idx in range(len(self.conv_layers) - 1):
+            x = self.conv_layers[idx](x)
+            if self.norm:
+                if self.norm_type == 'layer':
+                    x = x.permute(0, 2, 1)
+                    x = self.n_layers[idx](x)
+                    x = x.permute(0, 2, 1)
+                else:
+                    x = self.n_layers[idx](x)
+            x = self.activation(x)
 
         # For the last layer, do not apply nonlinearity.
-        if self.batchnorm and self.final_batchnorm:
-            x = self.bn_layers[-1](self.conv_layers[-1](x))
-        else:
-            x = self.conv_layers[-1](x)
+        x = self.conv_layers[-1](x)
+        if self.norm and self.final_norm:
+            if self.norm_type == 'layer':
+                x = x.permute(0, 2, 1)
+                x = self.n_layers[-1](x)
+                x = x.permute(0, 2, 1)
+            else:
+                x = self.n_layers[-1](x)
 
         pointwise_features = x
         if self.output_feat == 'pointwise':

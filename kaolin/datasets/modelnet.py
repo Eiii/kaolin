@@ -153,7 +153,7 @@ class ModelNetPointCloud(object):
     def __getitem__(self, index):
         """Returns the item at index idx. """
         if index not in self.sample_cache:
-            category = torch.tensor(self.cat_idxs[index], dtype=torch.long, device=self.device)
+            category = torch.tensor(self.cat_idxs[index], dtype=torch.long)
             tri_data = TriangleMesh.from_off(self.filepaths[index])
             full_data, _ = tri_data.sample(self.sample_points)
             self.sample_cache[index] = (full_data, category)
