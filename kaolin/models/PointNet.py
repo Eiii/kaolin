@@ -145,8 +145,9 @@ class PointNetFeatureExtractor(nn.Module):
             for idx in range(count):
                 if norm_type == 'batch':
                     norm = nn.BatchNorm1d(layer_dims[idx+1])
-                elif norm_type == 'layer':
-                    norm = nn.LayerNorm(layer_dims[idx+1])
+                elif norm_type == 'instance':
+                    norm = nn.InstanceNorm1d(layer_dims[idx+1], affine=True,
+                                             track_running_stats=True)
                 self.n_layers.append(norm)
 
         # Store whether or not to use batchnorm as a class attribute
@@ -186,25 +187,15 @@ class PointNetFeatureExtractor(nn.Module):
                 prev_in = x
             x = self.conv_layers[idx](x)
             if self.norm:
-                if self.norm_type == 'layer':
-                    x = x.permute(0, 2, 1)
-                    x = self.n_layers[idx](x)
-                    x = x.permute(0, 2, 1)
-                else:
-                    x = self.n_layers[idx](x)
+                x = self.n_layers[idx](x)
             x = self.activation(x)
 
         # For the last layer, do not apply nonlinearity.
-        if self.residual and prev_in is not None:
+        if self.residual:
             x = torch.cat((prev_in, x), dim=1)
         x = self.conv_layers[-1](x)
         if self.norm and self.final_norm:
-            if self.norm_type == 'layer':
-                x = x.permute(0, 2, 1)
-                x = self.n_layers[-1](x)
-                x = x.permute(0, 2, 1)
-            else:
-                x = self.n_layers[-1](x)
+            x = self.n_layers[-1](x)
 
         pointwise_features = x
         if self.output_feat == 'pointwise':
