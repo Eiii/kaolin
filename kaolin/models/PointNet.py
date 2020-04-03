@@ -121,11 +121,7 @@ class PointNetFeatureExtractor(nn.Module):
 
         self.residual = residual
 
-        # Add in_channels to the head of layer_dims (the first layer
-        # has number of channels equal to `in_channels`). Also, add
-        # feat_size to the tail of layer_dims.
-        if not isinstance(layer_dims, list):
-            layer_dims = list(layer_dims)
+        layer_dims = list(layer_dims)
         layer_dims.insert(0, in_channels)
         layer_dims.append(feat_size)
 
