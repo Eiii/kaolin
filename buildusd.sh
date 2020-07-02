@@ -14,4 +14,5 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+exit
 packman/packman pull --platform linux-x86_64 packman/target_deps.xml

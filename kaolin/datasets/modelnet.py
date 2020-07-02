@@ -16,9 +16,11 @@ from typing import Callable, Iterable, Optional, Union, List
 
 import torch
 import os
+import pickle
 import numpy as np
 from glob import glob
 from tqdm import tqdm
+from pathlib import Path
 
 from kaolin.rep.TriangleMesh import TriangleMesh
 from kaolin.transforms import transforms as tfs
@@ -115,6 +117,7 @@ class ModelNetPointCloud(object):
                  transform: Optional[Callable] = None,
                  num_points: int = 1024,
                  sample_points: Optional[bool] = None,
+                 file_cache: bool = False,
                  device: Optional[Union[torch.device, str]] = 'cpu'):
 
         assert split.lower() in ['train', 'test']
@@ -141,8 +144,9 @@ class ModelNetPointCloud(object):
 
             self.cat_idxs += [cat_idx] * len(cat_paths)
             self.names += [os.path.splitext(os.path.basename(cp))[0] for cp in cat_paths]
-            self.filepaths += cat_paths
+            self.filepaths += [Path(c) for c in cat_paths]
 
+        self.file_cache = file_cache
         self.sample_cache = dict()
         self.sample_points = sample_points
         self.num_points = num_points
@@ -153,9 +157,18 @@ class ModelNetPointCloud(object):
     def __getitem__(self, index):
         """Returns the item at index idx. """
         if index not in self.sample_cache:
+            filepath = self.filepaths[index]
+            cache_path = filepath.with_suffix('.cache')
+            if self.file_cache and cache_path.exists():
+                with cache_path.open('rb') as fd:
+                    full_data = pickle.load(fd)
+            else:
+                tri_data = TriangleMesh.from_off(filepath)
+                full_data, _ = tri_data.sample(self.sample_points)
+                if self.file_cache:
+                    with cache_path.open('wb') as fd:
+                        pickle.dump(full_data, fd)
             category = torch.tensor(self.cat_idxs[index], dtype=torch.long)
-            tri_data = TriangleMesh.from_off(self.filepaths[index])
-            full_data, _ = tri_data.sample(self.sample_points)
             self.sample_cache[index] = (full_data, category)
         else:
             full_data, category = self.sample_cache[index]
